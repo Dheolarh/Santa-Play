@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 70e2f4a472cf3fc47bc602730c4c4898, type: 3}
+  m_Name: PilerConfig
+  m_EditorClassIdentifier: Assembly-CSharp::SantaPlay.Piler.PilerConfig
+  _initialGravity: 0.8
+  _maxGravity: 2
+  _initialSpawnInterval: 2
+  _minSpawnInterval: 0.9
+  _gameDuration: 60
+  _fallDeathY: -250
+  _toppleDeathY: -120
+  _spawnPadding: 40
+  _fallbackSpawnWidth: 640
+  _minStickX: -380
+  _maxStickX: 380
+  _stickKeyboardSpeed: 800
+  _stickSmoothSpeed: 25
+  _timerDisplayMode: 0
+  _enableVideoAds: 0
