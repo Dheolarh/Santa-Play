@@ -6,14 +6,20 @@ public class SantaController : MonoBehaviour
 {
     public enum DragMode
     {
-        Relative, // Santa moves by how far you drag. Best for touch (finger doesn't cover him).
+        Relative, // Santa moves by how far you drag. Best for touch.
         Absolute  // Santa goes to wherever your finger/mouse is.
+    }
+
+    public enum NetFlipMode
+    {
+        Swipe,          // Net only changes side when you flick in the other direction.
+        FollowMovement  // Net changes side whenever Santa starts moving the other way.
     }
 
     [Header("References")]
     [Tooltip("Leave empty to use the Main Camera.")]
     [SerializeField] private Camera targetCamera;
-    [Tooltip("The Net object. It must be a child of Santa.")]
+    [Tooltip("The Net root object. Child of Santa, on his RIGHT side, rotation 0.")]
     [SerializeField] private Transform net;
 
     [Header("Movement")]
@@ -23,16 +29,28 @@ public class SantaController : MonoBehaviour
     [Tooltip("Lower = snappier, higher = floatier.")]
     [SerializeField, Min(0.01f)] private float smoothTime = 0.08f;
     [SerializeField, Min(1f)] private float maxSpeed = 40f;
-    [Tooltip("Extra gap kept between Santa and the screen edges.")]
+    [Tooltip("Extra gap kept between Santa/net and the screen edges.")]
     [SerializeField] private float edgePadding = 0.1f;
 
     [Header("Net Side")]
+    [SerializeField] private NetFlipMode netFlipMode = NetFlipMode.Swipe;
     [Tooltip("Tick if your net image has its hoop on the right (as in your design).")]
     [SerializeField] private bool netArtFacesRight = true;
-    [Tooltip("Santa must move faster than this (units/sec) before the net switches sides.")]
-    [SerializeField, Min(0f)] private float sideSwitchSpeed = 0.6f;
     [Tooltip("How long the net takes to swing to the other side.")]
     [SerializeField, Min(0.01f)] private float flipTime = 0.12f;
+
+    [Header("Swipe Flip (Swipe mode)")]
+    [Tooltip("Finger speed (units/sec) needed to count as a swipe. Higher = harder to flip by accident.")]
+    [SerializeField, Min(1f)] private float swipeSpeed = 16f;
+    [Tooltip("Smooths the finger speed so one jittery frame can't trigger a flip.")]
+    [SerializeField, Min(0.001f)] private float swipeSmoothing = 0.05f;
+    [Tooltip("Minimum time between two flips.")]
+    [SerializeField, Min(0f)] private float flipCooldown = 0.2f;
+    [Tooltip("Prints your drag speeds to the Console so you can tune Swipe Speed. Untick when done.")]
+    [SerializeField] private bool logSwipes = true;
+
+    [Header("Follow Movement Flip (FollowMovement mode)")]
+    [SerializeField, Min(0f)] private float sideSwitchSpeed = 0.6f;
 
     [Header("Net Swing")]
     [Tooltip("Degrees of tilt per unit/sec of Santa's speed.")]
@@ -43,25 +61,44 @@ public class SantaController : MonoBehaviour
     [SerializeField] private float idleSwingAngle = 2f;
     [SerializeField] private float idleSwingSpeed = 2f;
 
+    [Header("Net Catch Reaction")]
+    [Tooltip("How fast the net bobs after a catch (bounces per second).")]
+    [SerializeField, Min(0.1f)] private float kickFrequency = 3.5f;
+    [Tooltip("Lower = bouncier, higher = settles faster.")]
+    [SerializeField, Range(0.05f, 1.5f)] private float kickDamping = 0.35f;
+
     private SpriteRenderer spriteRenderer;
     private Camera cam;
 
     // Movement state
     private float targetX;
     private float velocityX;
+    private bool controlEnabled = true;
+
+    // Drag / swipe state
     private bool dragging;
     private float dragStartPointerX;
     private float dragStartSantaX;
-    private bool controlEnabled = true;
+    private float lastPointerX;
+    private float pointerSpeed;
+    private float peakPointerSpeed;
+    private float lastFlipTime = -999f;
 
     // Net state
     private Vector3 netBaseLocalPosition;
     private Vector3 netBaseScale;
-    private float side = 1f;        // current side, animates between 1 (right) and -1 (left)
+    private float side = 1f;        // animates between 1 (right) and -1 (left)
     private float targetSide = 1f;
     private float sideVelocity;
     private float tilt;
     private float tiltVelocity;
+    private float kickAngle;
+    private float kickVelocity;
+
+    // How far Santa + net stick out from Santa's centre.
+    // "Outer" = on the side the net is on, "Inner" = the opposite side.
+    private float outerReach;
+    private float innerReach;
 
     private void Awake()
     {
@@ -76,6 +113,7 @@ public class SantaController : MonoBehaviour
         }
 
         targetX = transform.position.x;
+        outerReach = innerReach = spriteRenderer.bounds.extents.x;
 
         if (net == null)
         {
@@ -88,6 +126,8 @@ public class SantaController : MonoBehaviour
         netBaseLocalPosition.x = Mathf.Abs(netBaseLocalPosition.x);
         netBaseScale = net.localScale;
         netBaseScale.x = Mathf.Abs(netBaseScale.x);
+
+        CacheNetReach();
     }
 
     private void Update()
@@ -97,11 +137,57 @@ public class SantaController : MonoBehaviour
         UpdateNet();
     }
 
-    // Call this later from the pause menu / game over: SetControlEnabled(false)
+    // Call this from pause / game over: SetControlEnabled(false)
     public void SetControlEnabled(bool value)
     {
         controlEnabled = value;
-        if (!value) dragging = false;
+        if (!value) EndDrag();
+    }
+
+    // Called by the NetCatcher when snow lands in the net. Makes the whole net bob.
+    public void KickNet(float degreesPerSecond)
+    {
+        // Push the hoop downward: clockwise when the net is on the right, counter-clockwise on the left.
+        kickVelocity += -targetSide * degreesPerSecond;
+    }
+
+    // ---------- Screen limits ----------
+
+    // Measures how far Santa + the whole net reach sideways, so everything stays on screen.
+    private void CacheNetReach()
+    {
+        SpriteRenderer[] renderers = net.GetComponentsInChildren<SpriteRenderer>();
+        if (renderers.Length == 0) return;
+
+        Bounds b = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++) b.Encapsulate(renderers[i].bounds);
+
+        float santaX = transform.position.x;
+        outerReach = Mathf.Max(outerReach, b.max.x - santaX);
+        innerReach = Mathf.Max(innerReach, santaX - b.min.x);
+    }
+
+    private float ClampToScreen(float x)
+    {
+        // t = 1 when the net is on the right, 0 when on the left (blends during the flip).
+        float t = (side + 1f) * 0.5f;
+        float leftReach = Mathf.Lerp(outerReach, innerReach, t);
+        float rightReach = Mathf.Lerp(innerReach, outerReach, t);
+
+        float halfView = cam.orthographicSize * cam.aspect;
+        float camX = cam.transform.position.x;
+
+        float minX = camX - halfView + leftReach + edgePadding;
+        float maxX = camX + halfView - rightReach - edgePadding;
+
+        // Very narrow screens: just stay in the middle.
+        if (minX > maxX)
+        {
+            float mid = (minX + maxX) * 0.5f;
+            minX = maxX = mid;
+        }
+
+        return Mathf.Clamp(x, minX, maxX);
     }
 
     // ---------- Input ----------
@@ -112,7 +198,7 @@ public class SantaController : MonoBehaviour
         Pointer pointer = Pointer.current;
         if (pointer == null || !pointer.press.isPressed)
         {
-            dragging = false;
+            EndDrag();
             return;
         }
 
@@ -124,6 +210,13 @@ public class SantaController : MonoBehaviour
             dragging = true;
             dragStartPointerX = pointerX;
             dragStartSantaX = targetX;
+            lastPointerX = pointerX;
+            pointerSpeed = 0f;
+            peakPointerSpeed = 0f;
+        }
+        else
+        {
+            UpdatePointerSpeed(pointerX);
         }
 
         float desired = dragMode == DragMode.Relative
@@ -142,6 +235,18 @@ public class SantaController : MonoBehaviour
         targetX = clamped;
     }
 
+    private void EndDrag()
+    {
+        if (dragging && logSwipes && netFlipMode == NetFlipMode.Swipe)
+        {
+            Debug.Log("Drag ended. Fastest finger speed: " + peakPointerSpeed.ToString("F1") +
+                      " (a swipe needs " + swipeSpeed.ToString("F1") + ")");
+        }
+
+        dragging = false;
+        pointerSpeed = 0f;
+    }
+
     private float GetPointerWorldX(Pointer pointer)
     {
         Vector2 screenPos = pointer.position.ReadValue();
@@ -149,20 +254,45 @@ public class SantaController : MonoBehaviour
         return cam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, depth)).x;
     }
 
-    private float ClampToScreen(float x)
+    private void UpdatePointerSpeed(float pointerX)
     {
-        float halfView = cam.orthographicSize * cam.aspect;
-        float halfSanta = spriteRenderer.bounds.extents.x;
-        float limit = Mathf.Max(0f, halfView - halfSanta - edgePadding);
-        float camX = cam.transform.position.x;
-        return Mathf.Clamp(x, camX - limit, camX + limit);
+        float dt = Mathf.Max(Time.deltaTime, 0.0001f);
+        float rawSpeed = (pointerX - lastPointerX) / dt;
+        lastPointerX = pointerX;
+
+        // Smooth it so a single jittery frame can't look like a swipe.
+        float blend = 1f - Mathf.Exp(-dt / swipeSmoothing);
+        pointerSpeed = Mathf.Lerp(pointerSpeed, rawSpeed, blend);
+        peakPointerSpeed = Mathf.Max(peakPointerSpeed, Mathf.Abs(pointerSpeed));
+
+        if (netFlipMode == NetFlipMode.Swipe) TrySwipeFlip();
+    }
+
+    private void TrySwipeFlip()
+    {
+        if (Mathf.Abs(pointerSpeed) < swipeSpeed) return;
+        if (Time.time - lastFlipTime < flipCooldown) return;
+
+        float direction = pointerSpeed > 0f ? 1f : -1f;
+
+        // Swiping the same way the net already faces does nothing.
+        if (Mathf.Approximately(direction, targetSide)) return;
+
+        targetSide = direction;
+        lastFlipTime = Time.time;
+
+        if (logSwipes)
+        {
+            Debug.Log("Swipe! Net -> " + (direction > 0f ? "right" : "left") +
+                      " (speed " + Mathf.Abs(pointerSpeed).ToString("F1") + ")");
+        }
     }
 
     // ---------- Movement ----------
 
     private void MoveSanta()
     {
-        // Re-clamp every frame so a resized browser window can't leave Santa off screen.
+        // Re-clamp every frame so a resized browser window or a net flip can't leave anything off screen.
         targetX = ClampToScreen(targetX);
 
         Vector3 pos = transform.position;
@@ -176,9 +306,11 @@ public class SantaController : MonoBehaviour
     {
         if (net == null) return;
 
-        // Pick a side based on which way Santa is actually moving.
-        if (velocityX > sideSwitchSpeed) targetSide = 1f;
-        else if (velocityX < -sideSwitchSpeed) targetSide = -1f;
+        if (netFlipMode == NetFlipMode.FollowMovement)
+        {
+            if (velocityX > sideSwitchSpeed) targetSide = 1f;
+            else if (velocityX < -sideSwitchSpeed) targetSide = -1f;
+        }
 
         side = Mathf.SmoothDamp(side, targetSide, ref sideVelocity, flipTime);
         if (Mathf.Abs(side - targetSide) < 0.001f) side = targetSide;
@@ -198,6 +330,14 @@ public class SantaController : MonoBehaviour
         float targetTilt = Mathf.Clamp(velocityX * tiltPerSpeed, -maxTilt, maxTilt);
         tilt = Mathf.SmoothDamp(tilt, targetTilt, ref tiltVelocity, tiltSmoothTime);
         float idle = Mathf.Sin(Time.time * idleSwingSpeed) * idleSwingAngle;
-        net.localRotation = Quaternion.Euler(0f, 0f, tilt + idle);
+
+        // Catch bounce: a damped spring that settles back to zero.
+        float dt = Mathf.Min(Time.deltaTime, 0.033f);
+        float omega = 2f * Mathf.PI * kickFrequency;
+        float accel = -omega * omega * kickAngle - 2f * kickDamping * omega * kickVelocity;
+        kickVelocity += accel * dt;
+        kickAngle += kickVelocity * dt;
+
+        net.localRotation = Quaternion.Euler(0f, 0f, tilt + idle + kickAngle);
     }
 }
