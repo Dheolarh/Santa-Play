@@ -24,6 +24,11 @@ public class Flake : MonoBehaviour
     [SerializeField, Min(0f)] private float catchImpact = 1f;
 
     [Header("Movement")]
+    [Header("Shockwave Reaction")]
+    [Tooltip("How quickly a shockwave push fades out. Higher = stops sooner.")]
+    [SerializeField, Min(0f)] private float nudgeDrag = 3f;
+    [Tooltip("How much a push makes the flake spin.")]
+    [SerializeField] private float nudgeSpin = 20f;
     [SerializeField, Min(0f)] private float minFallSpeed = 2.5f;
     [SerializeField, Min(0f)] private float maxFallSpeed = 4f;
     [SerializeField] private float maxSpinSpeed = 60f;
@@ -53,6 +58,7 @@ public class Flake : MonoBehaviour
     private float baseX;
     private float swayOffset;
     private float killY = float.NegativeInfinity;
+    private Vector2 nudgeVelocity;
 
     private Vector3 caughtFromScale;
     private Vector3 caughtToScale;
@@ -105,16 +111,27 @@ public class Flake : MonoBehaviour
         }
     }
 
-    private void Fall(float dt)
+        private void Fall(float dt)
     {
         Vector3 pos = transform.position;
-        pos.y -= fallSpeed * dt;
+
+        baseX += nudgeVelocity.x * dt;
+        pos.y += (nudgeVelocity.y - fallSpeed) * dt;
         pos.x = baseX + Mathf.Sin(Time.time * swaySpeed + swayOffset) * swayAmount;
         transform.position = pos;
+        nudgeVelocity *= Mathf.Exp(-nudgeDrag * dt);
 
         transform.Rotate(0f, 0f, spinSpeed * dt);
 
         if (pos.y < killY) Destroy(gameObject);
+    }
+
+    // Called by a Shockwave. Only falling flakes react; caught ones stay in the net.
+    public void Nudge(Vector2 impulse)
+    {
+        if (State != FlakeState.Falling) return;
+        nudgeVelocity += impulse;
+        spinSpeed -= impulse.x * nudgeSpin;
     }
 
     // The net calls this when the flake lands in the bag. The net then positions it.

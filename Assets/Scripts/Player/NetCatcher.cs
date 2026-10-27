@@ -111,6 +111,9 @@ public class NetCatcher : MonoBehaviour
             }
         }
 
+                // Bombs always hit, even if the net is full or melting.
+        if (catchingEnabled) ScanForBombs();
+
         bool canCatch = catchingEnabled
                         && held.Count < capacity
                         && (catchWhileMelting || !melting);
@@ -128,6 +131,38 @@ public class NetCatcher : MonoBehaviour
     }
 
     // ---------- Catching ----------
+
+        private void ScanForBombs()
+    {
+        List<Bomb> all = Bomb.Active;
+        for (int i = all.Count - 1; i >= 0; i--)
+        {
+            Bomb bomb = all[i];
+            if (bomb == null || bomb.Detonated) continue;
+            if (!IsInsideHoop(bomb.transform.position)) continue;
+
+            HitBomb(bomb);
+        }
+    }
+
+    private void HitBomb(Bomb bomb)
+    {
+        // Score never goes below 0.
+        int loss = Mathf.Min(bomb.ScoreLoss, totalScore);
+        totalScore -= loss;
+        ScoreChanged?.Invoke(totalScore, -loss);
+
+        // Red "-20" text (shows the bomb's full penalty even if the score was lower).
+        SpawnPopup(bomb.PopupText, bomb.PopupColor);
+
+        // Net feel
+        float impact = bomb.CatchImpact;
+        if (bag != null) bag.Jiggle(bagJiggle * impact);
+        if (santa != null) santa.KickNet(netKick * impact);
+
+        // Shockwave + explosion VFX, then the bomb removes itself.
+        bomb.Detonate();
+    }
 
     private void ScanForFlakes()
     {
@@ -172,7 +207,12 @@ public class NetCatcher : MonoBehaviour
         if (santa != null) santa.KickNet(netKick * impact);
     }
 
-    private void SpawnPopup(Flake flake)
+       private void SpawnPopup(Flake flake)
+    {
+        SpawnPopup(flake.PopupText, flake.PopupColor);
+    }
+
+    private void SpawnPopup(string text, Color color)
     {
         if (popupPrefab == null) return;
 
@@ -181,7 +221,7 @@ public class NetCatcher : MonoBehaviour
         pos.z = 0f;
 
         ScorePopup popup = Instantiate(popupPrefab, pos, Quaternion.identity);
-        popup.Play(flake.PopupText, flake.PopupColor);
+        popup.Play(text, color);
     }
 
     // ---------- Melting ----------

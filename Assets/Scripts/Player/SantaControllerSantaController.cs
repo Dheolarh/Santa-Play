@@ -67,12 +67,24 @@ public class SantaController : MonoBehaviour
     [Tooltip("Lower = bouncier, higher = settles faster.")]
     [SerializeField, Range(0.05f, 1.5f)] private float kickDamping = 0.35f;
 
+
+    [Header("Shockwave Shove")]
+    [Tooltip("How fast Santa wobbles back after being pushed.")]
+    [SerializeField, Min(0.1f)] private float shoveFrequency = 2.5f;
+    [Tooltip("Lower = more wobbly, higher = settles faster.")]
+    [SerializeField, Range(0.05f, 1.5f)] private float shoveDamping = 0.35f;
+    [Tooltip("Furthest Santa can be pushed from where your finger wants him.")]
+    [SerializeField, Min(0f)] private float maxShove = 2f;
+
     private SpriteRenderer spriteRenderer;
     private Camera cam;
 
     // Movement state
     private float targetX;
     private float velocityX;
+    private float smoothedX;
+    private float shoveX;
+    private float shoveVelocity;
     private bool controlEnabled = true;
 
     // Drag / swipe state
@@ -113,6 +125,7 @@ public class SantaController : MonoBehaviour
         }
 
         targetX = transform.position.x;
+        smoothedX = targetX;
         outerReach = innerReach = spriteRenderer.bounds.extents.x;
 
         if (net == null)
@@ -290,14 +303,28 @@ public class SantaController : MonoBehaviour
 
     // ---------- Movement ----------
 
-    private void MoveSanta()
+        private void MoveSanta()
     {
-        // Re-clamp every frame so a resized browser window or a net flip can't leave anything off screen.
         targetX = ClampToScreen(targetX);
+        smoothedX = Mathf.SmoothDamp(smoothedX, targetX, ref velocityX, smoothTime, maxSpeed);
+
+        // Shockwave shove: a damped spring that settles back to zero.
+        float dt = Mathf.Min(Time.deltaTime, 0.033f);
+        float omega = 2f * Mathf.PI * shoveFrequency;
+        float accel = -omega * omega * shoveX - 2f * shoveDamping * omega * shoveVelocity;
+        shoveVelocity += accel * dt;
+        shoveX += shoveVelocity * dt;
+        shoveX = Mathf.Clamp(shoveX, -maxShove, maxShove);
 
         Vector3 pos = transform.position;
-        pos.x = Mathf.SmoothDamp(pos.x, targetX, ref velocityX, smoothTime, maxSpeed);
+        pos.x = ClampToScreen(smoothedX + shoveX); // still can't leave the screen
         transform.position = pos;
+    }
+
+    // Called by a Shockwave. Positive = push right, negative = push left.
+    public void Shove(float unitsPerSecond)
+    {
+        shoveVelocity += unitsPerSecond;
     }
 
     // ---------- Net ----------
