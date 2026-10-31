@@ -68,6 +68,7 @@ public class Shockwave : MonoBehaviour
         center = transform.position;
         if (pushSanta) santa = FindFirstObjectByType<SantaController>();
         Apply(0f);
+        GameEvents.RaiseShockwaveStarted(center);
     }
 
     private void Update()

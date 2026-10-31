@@ -12,7 +12,7 @@ public class NetCatcher : MonoBehaviour
     [SerializeField] private NetBag bag;
     [Tooltip("Optional. Makes the whole net bob when snow lands.")]
     [SerializeField] private SantaController santa;
-    [Tooltip("The +10 / Gold +30 text prefab.")]
+    [Tooltip("The +10 / Gold +30 / -20 text prefab.")]
     [SerializeField] private ScorePopup popupPrefab;
 
     [Header("Catch Zone (green outline in the Scene view)")]
@@ -60,7 +60,7 @@ public class NetCatcher : MonoBehaviour
 
     public int TotalScore => totalScore;
 
-    // (new total, points just added). The score HUD will listen to this later.
+    // (new total, change). Positive change = flake, negative change = bomb.
     public event System.Action<int, int> ScoreChanged;
 
     private readonly List<Flake> held = new List<Flake>();
@@ -75,7 +75,7 @@ public class NetCatcher : MonoBehaviour
         if (hoopCenter == null)
             Debug.LogError("NetCatcher: Hoop Center is not assigned.", this);
         if (popupPrefab == null)
-            Debug.LogWarning("NetCatcher: Popup Prefab is not assigned, so no +10 text will show.", this);
+            Debug.LogWarning("NetCatcher: Popup Prefab is not assigned, so no score text will show.", this);
     }
 
     // Call with false on pause / game over, true to resume.
@@ -108,10 +108,11 @@ public class NetCatcher : MonoBehaviour
             {
                 meltingFlakes.Clear(); // the flakes destroy themselves when finished
                 melting = false;
+                GameEvents.RaiseMeltFinished();
             }
         }
 
-                // Bombs always hit, even if the net is full or melting.
+        // Bombs always hit, even if the net is full or melting.
         if (catchingEnabled) ScanForBombs();
 
         bool canCatch = catchingEnabled
@@ -132,7 +133,21 @@ public class NetCatcher : MonoBehaviour
 
     // ---------- Catching ----------
 
-        private void ScanForBombs()
+    private void ScanForFlakes()
+    {
+        List<Flake> all = Flake.Active;
+        for (int i = all.Count - 1; i >= 0; i--)
+        {
+            Flake flake = all[i];
+            if (flake == null || flake.State != Flake.FlakeState.Falling) continue;
+            if (!IsInsideHoop(flake.transform.position)) continue;
+
+            CatchFlake(flake);
+            if (held.Count >= capacity) break;
+        }
+    }
+
+    private void ScanForBombs()
     {
         List<Bomb> all = Bomb.Active;
         for (int i = all.Count - 1; i >= 0; i--)
@@ -143,6 +158,39 @@ public class NetCatcher : MonoBehaviour
 
             HitBomb(bomb);
         }
+    }
+
+    private bool IsInsideHoop(Vector3 worldPosition)
+    {
+        // Converting into the hoop's own space handles the flip, tilt and mirroring for free.
+        Vector3 local = hoopCenter.InverseTransformPoint(worldPosition);
+        float nx = local.x / (hoopRadius.x * catchForgiveness);
+        float ny = local.y / (hoopRadius.y * catchForgiveness);
+        return nx * nx + ny * ny <= 1f;
+    }
+
+    private void CatchFlake(Flake flake)
+    {
+        flake.BeginCatch(caughtScale, caughtSortingOrder, Random.Range(-1f, 1f));
+        held.Add(flake);
+
+        GameEvents.RaiseFlakeCaught(flake);
+        if (held.Count >= capacity) GameEvents.RaiseNetFull();
+
+        fullTimer = 0f;
+
+        // Score
+        int points = flake.Points;
+        totalScore += points;
+        ScoreChanged?.Invoke(totalScore, points);
+
+        // +10 / Gold +30 text
+        SpawnPopup(flake);
+
+        // Net feel
+        float impact = flake.CatchImpact;
+        if (bag != null) bag.Jiggle(bagJiggle * impact);
+        if (santa != null) santa.KickNet(netKick * impact);
     }
 
     private void HitBomb(Bomb bomb)
@@ -160,54 +208,12 @@ public class NetCatcher : MonoBehaviour
         if (bag != null) bag.Jiggle(bagJiggle * impact);
         if (santa != null) santa.KickNet(netKick * impact);
 
-        // Shockwave + explosion VFX, then the bomb removes itself.
+        // Explosion sound moment, then shockwave + VFX + camera shake, and the bomb removes itself.
+        GameEvents.RaiseBombCaught(bomb, loss);
         bomb.Detonate();
     }
 
-    private void ScanForFlakes()
-    {
-        List<Flake> all = Flake.Active;
-        for (int i = all.Count - 1; i >= 0; i--)
-        {
-            Flake flake = all[i];
-            if (flake == null || flake.State != Flake.FlakeState.Falling) continue;
-            if (!IsInsideHoop(flake.transform.position)) continue;
-
-            CatchFlake(flake);
-            if (held.Count >= capacity) break;
-        }
-    }
-
-    private bool IsInsideHoop(Vector3 worldPosition)
-    {
-        // Converting into the hoop's own space handles the flip, tilt and mirroring for free.
-        Vector3 local = hoopCenter.InverseTransformPoint(worldPosition);
-        float nx = local.x / (hoopRadius.x * catchForgiveness);
-        float ny = local.y / (hoopRadius.y * catchForgiveness);
-        return nx * nx + ny * ny <= 1f;
-    }
-
-    private void CatchFlake(Flake flake)
-    {
-        flake.BeginCatch(caughtScale, caughtSortingOrder, Random.Range(-1f, 1f));
-        held.Add(flake);
-        fullTimer = 0f;
-
-        // Score
-        int points = flake.Points;
-        totalScore += points;
-        ScoreChanged?.Invoke(totalScore, points);
-
-        // +10 / Gold +30 text
-        SpawnPopup(flake);
-
-        // Net feel
-        float impact = flake.CatchImpact;
-        if (bag != null) bag.Jiggle(bagJiggle * impact);
-        if (santa != null) santa.KickNet(netKick * impact);
-    }
-
-       private void SpawnPopup(Flake flake)
+    private void SpawnPopup(Flake flake)
     {
         SpawnPopup(flake.PopupText, flake.PopupColor);
     }
@@ -231,6 +237,8 @@ public class NetCatcher : MonoBehaviour
         melting = true;
         meltTimer = 0f;
         fullTimer = 0f;
+
+        GameEvents.RaiseMeltStarted(held.Count);
 
         for (int i = 0; i < held.Count; i++)
         {

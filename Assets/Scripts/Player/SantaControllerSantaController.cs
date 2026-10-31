@@ -67,7 +67,6 @@ public class SantaController : MonoBehaviour
     [Tooltip("Lower = bouncier, higher = settles faster.")]
     [SerializeField, Range(0.05f, 1.5f)] private float kickDamping = 0.35f;
 
-
     [Header("Shockwave Shove")]
     [Tooltip("How fast Santa wobbles back after being pushed.")]
     [SerializeField, Min(0.1f)] private float shoveFrequency = 2.5f;
@@ -81,8 +80,8 @@ public class SantaController : MonoBehaviour
 
     // Movement state
     private float targetX;
-    private float velocityX;
     private float smoothedX;
+    private float velocityX;
     private float shoveX;
     private float shoveVelocity;
     private bool controlEnabled = true;
@@ -162,6 +161,21 @@ public class SantaController : MonoBehaviour
     {
         // Push the hoop downward: clockwise when the net is on the right, counter-clockwise on the left.
         kickVelocity += -targetSide * degreesPerSecond;
+    }
+
+    // Called by a Shockwave. Positive = push right, negative = push left.
+    public void Shove(float unitsPerSecond)
+    {
+        shoveVelocity += unitsPerSecond;
+        GameEvents.RaiseSantaShoved(unitsPerSecond);
+    }
+
+    // Changes the net side and tells the audio hook, only when it really changes.
+    private void SetTargetSide(float value)
+    {
+        if (Mathf.Approximately(targetSide, value)) return;
+        targetSide = value;
+        GameEvents.RaiseNetFlipped(value);
     }
 
     // ---------- Screen limits ----------
@@ -291,7 +305,7 @@ public class SantaController : MonoBehaviour
         // Swiping the same way the net already faces does nothing.
         if (Mathf.Approximately(direction, targetSide)) return;
 
-        targetSide = direction;
+        SetTargetSide(direction);
         lastFlipTime = Time.time;
 
         if (logSwipes)
@@ -303,8 +317,9 @@ public class SantaController : MonoBehaviour
 
     // ---------- Movement ----------
 
-        private void MoveSanta()
+    private void MoveSanta()
     {
+        // Re-clamp every frame so a resized browser window or a net flip can't leave anything off screen.
         targetX = ClampToScreen(targetX);
         smoothedX = Mathf.SmoothDamp(smoothedX, targetX, ref velocityX, smoothTime, maxSpeed);
 
@@ -321,12 +336,6 @@ public class SantaController : MonoBehaviour
         transform.position = pos;
     }
 
-    // Called by a Shockwave. Positive = push right, negative = push left.
-    public void Shove(float unitsPerSecond)
-    {
-        shoveVelocity += unitsPerSecond;
-    }
-
     // ---------- Net ----------
 
     private void UpdateNet()
@@ -335,8 +344,8 @@ public class SantaController : MonoBehaviour
 
         if (netFlipMode == NetFlipMode.FollowMovement)
         {
-            if (velocityX > sideSwitchSpeed) targetSide = 1f;
-            else if (velocityX < -sideSwitchSpeed) targetSide = -1f;
+            if (velocityX > sideSwitchSpeed) SetTargetSide(1f);
+            else if (velocityX < -sideSwitchSpeed) SetTargetSide(-1f);
         }
 
         side = Mathf.SmoothDamp(side, targetSide, ref sideVelocity, flipTime);

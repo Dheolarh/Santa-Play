@@ -20,6 +20,10 @@ public class Bomb : MonoBehaviour
     [Tooltip("How strongly the net reacts when the bomb lands. 1 = same as a normal flake.")]
     [SerializeField, Min(0f)] private float catchImpact = 3f;
 
+    [Header("Audio")]
+    [Tooltip("Free label your audio system can read. Does nothing by itself.")]
+    [SerializeField] private string audioId = "bomb";
+
     [Header("Movement")]
     [SerializeField, Min(0f)] private float minFallSpeed = 2.5f;
     [SerializeField, Min(0f)] private float maxFallSpeed = 4f;
@@ -53,6 +57,7 @@ public class Bomb : MonoBehaviour
     public int ScoreLoss => scoreLoss;
     public Color PopupColor => popupColor;
     public float CatchImpact => catchImpact;
+    public string AudioId => audioId;
     public bool Detonated { get; private set; }
 
     public string PopupText
@@ -87,6 +92,7 @@ public class Bomb : MonoBehaviour
         spinSpeed = Random.Range(-maxSpinSpeed, maxSpinSpeed);
         swayOffset = Random.Range(0f, Mathf.PI * 2f);
         baseX = transform.position.x;
+        GameEvents.RaiseBombSpawned(this);
     }
 
     private void Update()
@@ -98,14 +104,23 @@ public class Bomb : MonoBehaviour
 
         Vector3 pos = transform.position;
         baseX += nudgeVelocity.x * dt;
-        pos.y += (nudgeVelocity.y - fallSpeed) * dt;
+        pos.y += (nudgeVelocity.y - fallSpeed * GameSpeed.BombMultiplier) * dt;
         pos.x = baseX + Mathf.Sin(Time.time * swaySpeed + swayOffset) * swayAmount;
         transform.position = pos;
         nudgeVelocity *= Mathf.Exp(-nudgeDrag * dt);
 
         transform.Rotate(0f, 0f, spinSpeed * dt);
 
-        if (pos.y < killY || age > maxLifetime) Destroy(gameObject);
+               if (pos.y < killY)
+        {
+            GameEvents.RaiseBombRemoved(this, GameEvents.BombEnd.Missed);
+            Destroy(gameObject);
+        }
+        else if (age > maxLifetime)
+        {
+            GameEvents.RaiseBombRemoved(this, GameEvents.BombEnd.Expired);
+            Destroy(gameObject);
+        }
     }
 
     // Called by a Shockwave.
@@ -122,6 +137,7 @@ public class Bomb : MonoBehaviour
         if (Detonated) return;
         Detonated = true;
         Active.Remove(this);
+        GameEvents.RaiseBombRemoved(this, GameEvents.BombEnd.Detonated);
 
         Vector3 pos = transform.position;
         CameraShake.Shake(shakeStrength, shakeDuration);

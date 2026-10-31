@@ -23,6 +23,10 @@ public class Flake : MonoBehaviour
     [Tooltip("How strongly the net reacts when this flake lands. 1 = normal, 2 = double.")]
     [SerializeField, Min(0f)] private float catchImpact = 1f;
 
+    [Header("Audio")]
+    [Tooltip("Free label your audio system can read, e.g. normal, gold. Does nothing by itself.")]
+    [SerializeField] private string audioId = "normal";
+
     [Header("Movement")]
     [Header("Shockwave Reaction")]
     [Tooltip("How quickly a shockwave push fades out. Higher = stops sooner.")]
@@ -38,6 +42,7 @@ public class Flake : MonoBehaviour
     public int Points => points;
     public Color PopupColor => popupColor;
     public float CatchImpact => catchImpact;
+    public string AudioId => audioId;
     public FlakeState State { get; private set; } = FlakeState.Falling;
     public float SlotJitter { get; private set; }
 
@@ -97,6 +102,7 @@ public class Flake : MonoBehaviour
         spinSpeed = Random.Range(-maxSpinSpeed, maxSpinSpeed);
         swayOffset = Random.Range(0f, Mathf.PI * 2f);
         baseX = transform.position.x;
+        GameEvents.RaiseFlakeSpawned(this);
     }
 
     private void Update()
@@ -111,19 +117,23 @@ public class Flake : MonoBehaviour
         }
     }
 
-        private void Fall(float dt)
+           private void Fall(float dt)
     {
         Vector3 pos = transform.position;
 
         baseX += nudgeVelocity.x * dt;
-        pos.y += (nudgeVelocity.y - fallSpeed) * dt;
+        pos.y += (nudgeVelocity.y - fallSpeed * GameSpeed.FlakeMultiplier) * dt;
         pos.x = baseX + Mathf.Sin(Time.time * swaySpeed + swayOffset) * swayAmount;
         transform.position = pos;
         nudgeVelocity *= Mathf.Exp(-nudgeDrag * dt);
 
         transform.Rotate(0f, 0f, spinSpeed * dt);
 
-        if (pos.y < killY) Destroy(gameObject);
+        if (pos.y < killY)
+        {
+            GameEvents.RaiseFlakeMissed(this);
+            Destroy(gameObject);
+        }
     }
 
     // Called by a Shockwave. Only falling flakes react; caught ones stay in the net.
