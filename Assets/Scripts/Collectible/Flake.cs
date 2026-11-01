@@ -28,16 +28,17 @@ public class Flake : MonoBehaviour
     [SerializeField] private string audioId = "normal";
 
     [Header("Movement")]
-    [Header("Shockwave Reaction")]
-    [Tooltip("How quickly a shockwave push fades out. Higher = stops sooner.")]
-    [SerializeField, Min(0f)] private float nudgeDrag = 3f;
-    [Tooltip("How much a push makes the flake spin.")]
-    [SerializeField] private float nudgeSpin = 20f;
     [SerializeField, Min(0f)] private float minFallSpeed = 2.5f;
     [SerializeField, Min(0f)] private float maxFallSpeed = 4f;
     [SerializeField] private float maxSpinSpeed = 60f;
     [SerializeField, Min(0f)] private float swayAmount = 0.4f;
     [SerializeField, Min(0f)] private float swaySpeed = 1.5f;
+
+    [Header("Shockwave Reaction")]
+    [Tooltip("How quickly a shockwave push fades out. Higher = stops sooner.")]
+    [SerializeField, Min(0f)] private float nudgeDrag = 3f;
+    [Tooltip("How much a push makes the flake spin.")]
+    [SerializeField] private float nudgeSpin = 20f;
 
     public int Points => points;
     public Color PopupColor => popupColor;
@@ -64,6 +65,12 @@ public class Flake : MonoBehaviour
     private float swayOffset;
     private float killY = float.NegativeInfinity;
     private Vector2 nudgeVelocity;
+    private bool initialized;
+
+    // Look of the prefab, remembered so a reused flake starts fresh.
+    private Vector3 baseScale;
+    private Color baseColor;
+    private int baseSortingOrder;
 
     private Vector3 caughtFromScale;
     private Vector3 caughtToScale;
@@ -78,11 +85,16 @@ public class Flake : MonoBehaviour
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        baseScale = transform.localScale;
+        baseColor = spriteRenderer.color;
+        baseSortingOrder = spriteRenderer.sortingOrder;
     }
 
+    // Runs every time the flake is taken from the pool, so everything is reset here.
     private void OnEnable()
     {
         Active.Add(this);
+        ResetState();
     }
 
     private void OnDisable()
@@ -90,19 +102,43 @@ public class Flake : MonoBehaviour
         Active.Remove(this);
     }
 
-    // Called by the spawner right after creating the flake.
+    private void ResetState()
+    {
+        State = FlakeState.Falling;
+        SlotJitter = 0f;
+        initialized = false;
+        killY = float.NegativeInfinity;
+        nudgeVelocity = Vector2.zero;
+        caughtTimer = 0f;
+        meltTimer = 0f;
+
+        transform.localScale = baseScale;
+        spriteRenderer.color = baseColor;
+        spriteRenderer.sortingOrder = baseSortingOrder;
+    }
+
+    // Called by the spawner right after taking the flake from the pool.
     public void Init(float killLineY)
     {
         killY = killLineY;
+        if (!initialized) Setup();
     }
 
-    private void Start()
+    // Picks this flake's random speed and sway. Runs once per use.
+    private void Setup()
     {
+        initialized = true;
         fallSpeed = Random.Range(minFallSpeed, maxFallSpeed);
         spinSpeed = Random.Range(-maxSpinSpeed, maxSpinSpeed);
         swayOffset = Random.Range(0f, Mathf.PI * 2f);
         baseX = transform.position.x;
         GameEvents.RaiseFlakeSpawned(this);
+    }
+
+    private void Start()
+    {
+        // Safety net for a flake placed by hand in the scene (not made by the spawner).
+        if (!initialized) Setup();
     }
 
     private void Update()
@@ -117,7 +153,7 @@ public class Flake : MonoBehaviour
         }
     }
 
-           private void Fall(float dt)
+    private void Fall(float dt)
     {
         Vector3 pos = transform.position;
 
@@ -132,7 +168,7 @@ public class Flake : MonoBehaviour
         if (pos.y < killY)
         {
             GameEvents.RaiseFlakeMissed(this);
-            Destroy(gameObject);
+            Pool.Release(gameObject);
         }
     }
 
@@ -189,6 +225,6 @@ public class Flake : MonoBehaviour
         c.a = 1f - t;
         spriteRenderer.color = c;
 
-        if (t >= 1f) Destroy(gameObject);
+        if (t >= 1f) Pool.Release(gameObject);
     }
 }

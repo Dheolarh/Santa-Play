@@ -22,6 +22,10 @@ public class FlakeSpawner : MonoBehaviour
     [Tooltip("How far above/below the screen flakes appear/disappear.")]
     [SerializeField] private float offscreenOffset = 1f;
 
+    [Header("Pooling")]
+    [Tooltip("Flakes of each type created at startup so nothing is created while playing. The pool still grows if it needs more.")]
+    [SerializeField, Min(0)] private int prewarmPerType = 12;
+
     private Camera cam;
     private float timer;
     private bool spawning;
@@ -35,6 +39,18 @@ public class FlakeSpawner : MonoBehaviour
             Debug.LogError("FlakeSpawner: no camera tagged MainCamera found.", this);
         if (options == null || options.Length == 0)
             Debug.LogWarning("FlakeSpawner: the Options list is empty.", this);
+
+        Prewarm();
+    }
+
+    private void Prewarm()
+    {
+        if (options == null) return;
+
+        foreach (FlakeOption o in options)
+        {
+            if (o.prefab != null) Pool.Prewarm(o.prefab, prewarmPerType);
+        }
     }
 
     private void Update()
@@ -66,7 +82,7 @@ public class FlakeSpawner : MonoBehaviour
         float spawnY = center.y + halfHeight + offscreenOffset;
         float killY = center.y - halfHeight - offscreenOffset;
 
-        Flake flake = Instantiate(prefab, new Vector3(x, spawnY, 0f), Quaternion.identity);
+        Flake flake = Pool.Get(prefab, new Vector3(x, spawnY, 0f), Quaternion.identity);
         flake.Init(killY);
     }
 

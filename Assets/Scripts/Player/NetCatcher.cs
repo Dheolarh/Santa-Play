@@ -54,6 +54,8 @@ public class NetCatcher : MonoBehaviour
     [SerializeField] private Vector3 popupOffset = new Vector3(0f, 0.5f, 0f);
     [Tooltip("Random sideways offset so quick catches don't stack exactly.")]
     [SerializeField, Min(0f)] private float popupJitterX = 0.3f;
+    [Tooltip("Popups created at startup so none are created while playing. The pool still grows if needed.")]
+    [SerializeField, Min(0)] private int popupPrewarm = 6;
 
     [Header("Score (view only while playing)")]
     [SerializeField] private int totalScore;
@@ -76,6 +78,8 @@ public class NetCatcher : MonoBehaviour
             Debug.LogError("NetCatcher: Hoop Center is not assigned.", this);
         if (popupPrefab == null)
             Debug.LogWarning("NetCatcher: Popup Prefab is not assigned, so no score text will show.", this);
+        else
+            Pool.Prewarm(popupPrefab, popupPrewarm);
     }
 
     // Call with false on pause / game over, true to resume.
@@ -106,7 +110,7 @@ public class NetCatcher : MonoBehaviour
             meltTimer += Time.deltaTime;
             if (meltTimer >= meltDuration)
             {
-                meltingFlakes.Clear(); // the flakes destroy themselves when finished
+                meltingFlakes.Clear(); // the flakes return themselves to the pool when finished
                 melting = false;
                 GameEvents.RaiseMeltFinished();
             }
@@ -127,8 +131,8 @@ public class NetCatcher : MonoBehaviour
     private void LateUpdate()
     {
         if (hoopCenter == null) return;
-        PlaceFlakes(held);
-        PlaceFlakes(meltingFlakes);
+        PlaceFlakes(held, Flake.FlakeState.Caught);
+        PlaceFlakes(meltingFlakes, Flake.FlakeState.Melting);
     }
 
     // ---------- Catching ----------
@@ -226,7 +230,7 @@ public class NetCatcher : MonoBehaviour
         pos.x += Random.Range(-popupJitterX, popupJitterX);
         pos.z = 0f;
 
-        ScorePopup popup = Instantiate(popupPrefab, pos, Quaternion.identity);
+        ScorePopup popup = Pool.Get(popupPrefab, pos, Quaternion.identity);
         popup.Play(text, color);
     }
 
@@ -262,7 +266,9 @@ public class NetCatcher : MonoBehaviour
 
     // ---------- Snow inside the bag ----------
 
-    private void PlaceFlakes(List<Flake> list)
+    // Only moves flakes that are still in the expected state. A flake that already finished
+    // melting goes back to the pool and may be reused, so it must not be dragged into the bag.
+    private void PlaceFlakes(List<Flake> list, Flake.FlakeState expectedState)
     {
         if (list.Count == 0) return;
 
@@ -279,7 +285,7 @@ public class NetCatcher : MonoBehaviour
         for (int i = 0; i < list.Count; i++)
         {
             Flake flake = list[i];
-            if (flake == null) continue;
+            if (flake == null || flake.State != expectedState || !flake.gameObject.activeInHierarchy) continue;
 
             float k = capacity > 1 ? Mathf.Clamp01(i / (float)(capacity - 1)) : 0f;
             float depth = Mathf.Lerp(slotDepthMax, slotDepthMin, k);

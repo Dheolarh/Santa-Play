@@ -46,13 +46,14 @@ public class ScorePopup : MonoBehaviour
         baseScale = transform.localScale;
     }
 
-    // Called right after the popup is created.
+    // Called right after the popup is taken from the pool. Resets everything for this use.
     public void Play(string message, Color color)
     {
         if (label != null)
         {
             label.text = message;
             label.color = color;
+            label.alpha = 1f;
         }
 
         startPosition = transform.position;
@@ -81,6 +82,6 @@ public class ScorePopup : MonoBehaviour
             label.alpha = Mathf.Clamp01(fade);
         }
 
-        if (elapsed >= lifetime) Destroy(gameObject);
+        if (elapsed >= lifetime) Pool.Release(gameObject);
     }
 }
