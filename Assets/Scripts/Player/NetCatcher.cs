@@ -32,6 +32,14 @@ public class NetCatcher : MonoBehaviour
     [Tooltip("Off = the net can't catch anything until the melt has finished. On = it can catch while melting.")]
     [SerializeField] private bool catchWhileMelting = false;
 
+    [Header("Bomb Hit")]
+    [Tooltip("How many flakes in the net are blown away when a bomb is caught. Picked at random (gold too). If the net holds fewer, only those are lost. The score penalty still applies on top.")]
+    [SerializeField, Min(0)] private int bombFlakeLoss = 2;
+    [Tooltip("Colour the blown-away flakes glow while they vanish.")]
+    [SerializeField] private Color popTint = new Color(1f, 0.55f, 0.15f, 1f);
+    [Tooltip("How long a blown-away flake takes to vanish.")]
+    [SerializeField, Min(0.05f)] private float popDuration = 0.4f;
+
     [Header("Net Feel")]
     [Tooltip("How hard the bag bounces on each catch.")]
     [SerializeField, Min(0f)] private float bagJiggle = 3f;
@@ -207,6 +215,9 @@ public class NetCatcher : MonoBehaviour
         // Red "-20" text (shows the bomb's full penalty even if the score was lower).
         SpawnPopup(bomb.PopupText, bomb.PopupColor);
 
+        // The blast also blows random flakes out of the net.
+        PopFlakesFromBomb();
+
         // Net feel
         float impact = bomb.CatchImpact;
         if (bag != null) bag.Jiggle(bagJiggle * impact);
@@ -215,6 +226,26 @@ public class NetCatcher : MonoBehaviour
         // Explosion sound moment, then shockwave + VFX + camera shake, and the bomb removes itself.
         GameEvents.RaiseBombCaught(bomb, loss);
         bomb.Detonate();
+    }
+
+    // Removes up to "bombFlakeLoss" random flakes from the net (gold ones too).
+    // With fewer flakes inside, only those are lost; with none, nothing happens.
+    // Points already earned for those flakes are kept; the bomb's own score penalty is separate.
+    private void PopFlakesFromBomb()
+    {
+        int count = Mathf.Min(bombFlakeLoss, held.Count);
+
+        for (int i = 0; i < count; i++)
+        {
+            int index = Random.Range(0, held.Count);
+            Flake flake = held[index];
+            held.RemoveAt(index);
+
+            if (flake != null) flake.Pop(popDuration, popTint);
+        }
+
+        // The net just got emptier, so restart the "full" countdown.
+        fullTimer = 0f;
     }
 
     private void SpawnPopup(Flake flake)

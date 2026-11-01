@@ -4,7 +4,7 @@ using UnityEngine;
 [RequireComponent(typeof(SpriteRenderer))]
 public class Flake : MonoBehaviour
 {
-    public enum FlakeState { Falling, Caught, Melting }
+    public enum FlakeState { Falling, Caught, Melting, Popping }
 
     // Every live flake, so the net can check them without physics.
     public static readonly List<Flake> Active = new List<Flake>();
@@ -39,6 +39,13 @@ public class Flake : MonoBehaviour
     [SerializeField, Min(0f)] private float nudgeDrag = 3f;
     [Tooltip("How much a push makes the flake spin.")]
     [SerializeField] private float nudgeSpin = 20f;
+
+    [Header("Bomb Pop (flake blown out of the net by a bomb)")]
+    [Tooltip("How hard the flake is flung out of the net (units per second).")]
+    [SerializeField, Min(0f)] private float popLaunchSpeed = 2.5f;
+    [Tooltip("How big the flake swells just before it vanishes. 1 = no swell.")]
+    [SerializeField, Min(1f)] private float popSwell = 1.35f;
+    [SerializeField] private float popSpinSpeed = 300f;
 
     public int Points => points;
     public Color PopupColor => popupColor;
@@ -82,6 +89,14 @@ public class Flake : MonoBehaviour
     private Color meltFromColor;
     private Color meltTint;
 
+    private float popTimer;
+    private float popDuration = 0.4f;
+    private Vector3 popFromScale;
+    private Color popFromColor;
+    private Color popTint;
+    private Vector2 popVelocity;
+    private float popSpin;
+
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
@@ -111,6 +126,8 @@ public class Flake : MonoBehaviour
         nudgeVelocity = Vector2.zero;
         caughtTimer = 0f;
         meltTimer = 0f;
+        popTimer = 0f;
+        popVelocity = Vector2.zero;
 
         transform.localScale = baseScale;
         spriteRenderer.color = baseColor;
@@ -150,6 +167,7 @@ public class Flake : MonoBehaviour
             case FlakeState.Falling: Fall(dt); break;
             case FlakeState.Caught: UpdateCaught(dt); break;
             case FlakeState.Melting: UpdateMelting(dt); break;
+            case FlakeState.Popping: UpdatePopping(dt); break;
         }
     }
 
@@ -224,6 +242,48 @@ public class Flake : MonoBehaviour
         Color c = Color.Lerp(meltFromColor, meltTint, Mathf.Clamp01(t * 2f));
         c.a = 1f - t;
         spriteRenderer.color = c;
+
+        if (t >= 1f) Pool.Release(gameObject);
+    }
+
+    // The net calls this when a bomb blows this flake out of the bag.
+    // The flake is no longer positioned by the net: it flings outward, swells, glows and fades.
+    public void Pop(float duration, Color tint)
+    {
+        State = FlakeState.Popping;
+        popDuration = Mathf.Max(0.05f, duration);
+        popTimer = 0f;
+        popFromScale = transform.localScale;
+        popFromColor = spriteRenderer.color;
+        popTint = tint;
+
+        // Fling mostly sideways and up, away from the bag.
+        float side = Random.value < 0.5f ? -1f : 1f;
+        popVelocity = new Vector2(side * Random.Range(0.4f, 1f), Random.Range(0.5f, 1.2f)) * popLaunchSpeed;
+        popSpin = Random.Range(0.5f, 1f) * popSpinSpeed * (Random.value < 0.5f ? -1f : 1f);
+    }
+
+    private void UpdatePopping(float dt)
+    {
+        popTimer += dt;
+        float t = Mathf.Clamp01(popTimer / popDuration);
+
+        // Swell quickly in the first quarter, then shrink to nothing.
+        const float swellEnd = 0.25f;
+        float scaleMultiplier = t < swellEnd
+            ? Mathf.Lerp(1f, popSwell, t / swellEnd)
+            : Mathf.Lerp(popSwell, 0f, (t - swellEnd) / (1f - swellEnd));
+        transform.localScale = popFromScale * scaleMultiplier;
+
+        // Fiery tint, then fade out.
+        Color c = Color.Lerp(popFromColor, popTint, Mathf.Clamp01(t * 3f));
+        c.a = 1f - t * t;
+        spriteRenderer.color = c;
+
+        // Drift outward and slow down.
+        transform.position += (Vector3)(popVelocity * dt);
+        popVelocity *= Mathf.Exp(-4f * dt);
+        transform.Rotate(0f, 0f, popSpin * dt);
 
         if (t >= 1f) Pool.Release(gameObject);
     }
