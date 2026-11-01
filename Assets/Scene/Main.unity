@@ -433,8 +433,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0.311, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 12, y: -4.5}
-  m_SizeDelta: {x: 869.24, y: 196.18}
+  m_AnchoredPosition: {x: 14.77, y: -4.5000978}
+  m_SizeDelta: {x: 1275.34, y: 606.66}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &235596988
 MonoBehaviour:
@@ -674,7 +674,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: -6
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 9056693e3c794444eaeb896eb9d3c496, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -695,7 +695,7 @@ Transform:
   m_GameObject: {fileID: 659924961}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.2, y: 9.6, z: 0}
+  m_LocalPosition: {x: 0.2, y: 9.6, z: -5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -710,8 +710,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 694125610}
+  - component: {fileID: 694125611}
+  - component: {fileID: 694125612}
   m_Layer: 0
-  m_Name: Game eVENT
+  m_Name: Game Manager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -732,6 +734,51 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &694125611
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 694125609}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 137c96191718f394c8c0046a7fc489f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameTimer
+  duration: 120
+  startOnPlay: 1
+  timerText: {fileID: 235596988}
+  clockIcon: {fileID: 704420957}
+  warningSeconds: 30
+  warningColor: {r: 0.98742133, g: 0.11426138, b: 0.07141718, a: 1}
+  pulseSwell: 1.25
+  pulseDuration: 0.35
+  finalSeconds: 10
+  finalPulseSwell: 1.45
+--- !u!114 &694125612
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 694125609}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 438b711d1ebbe50478a335f0b2dfe259, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameOverController
+  gameOverPanel: {fileID: 0}
+  gameOverImage: {fileID: 0}
+  gameOverSprite: {fileID: 0}
+  finalScoreText: {fileID: 0}
+  finalScoreFormat: '{0}'
+  showDelay: 0.6
+  santa: {fileID: 0}
+  netCatcher: {fileID: 0}
+  flakeSpawner: {fileID: 0}
+  bombSpawner: {fileID: 0}
+  gameSpeed: {fileID: 0}
 --- !u!1 &704420956
 GameObject:
   m_ObjectHideFlags: 0
@@ -929,10 +976,17 @@ MonoBehaviour:
   bombCaughtSound: {fileID: 8300000, guid: 444e15d580146d640bb996c401957b56, type: 3}
   shockwaveSound: {fileID: 0}
   netFlipSound: {fileID: 0}
+  sfxVolume: 0.5
   meltSound: {fileID: 8300000, guid: 479a2c87bef615f459c9b701eb8dadbf, type: 3}
   meltVolume: 0.605
   meltStartOffset: 0.91
   meltFadeOut: 0.15
+  timeWarningLoopSound: {fileID: 0}
+  timeWarningVolume: 0.8
+  gameOverSound: {fileID: 0}
+  gameOverVolume: 1
+  fadeMusicOnGameOver: 1
+  musicFadeOut: 0.5
 --- !u!4 &899647437
 Transform:
   m_ObjectHideFlags: 0
@@ -1297,8 +1351,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -51.1, y: -11.01}
-  m_SizeDelta: {x: 167.79, y: 104.03}
+  m_AnchoredPosition: {x: -29, y: -11.01}
+  m_SizeDelta: {x: 190, y: 120}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1012025501
 MonoBehaviour:
@@ -1372,7 +1426,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0.311, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -45, y: -5}
+  m_AnchoredPosition: {x: -29, y: -5}
   m_SizeDelta: {x: 1012.8, y: 487.73}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1090348128
@@ -6903,6 +6957,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1917516896}
+  - component: {fileID: 1917516897}
   m_Layer: 5
   m_Name: Widget_Score
   m_TagString: Untagged
@@ -6932,6 +6987,34 @@ RectTransform:
   m_AnchoredPosition: {x: 618, y: -60}
   m_SizeDelta: {x: 260, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1917516897
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1917516895}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b4caf49e87a069046a794879d05d042a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ScoreUI
+  scoreText: {fileID: 1090348128}
+  starIcon: {fileID: 1154838195}
+  netCatcher: {fileID: 0}
+  minCountSpeed: 40
+  catchUpTime: 0.25
+  gainColor: {r: 1, g: 0.85, b: 0.25, a: 1}
+  gainTextSwell: 1.3
+  gainStarSwell: 1.45
+  gainStarWobble: 25
+  gainDuration: 0.35
+  normalPoints: 10
+  maxIntensity: 1.6
+  lossColor: {r: 1, g: 0.2, b: 0.2, a: 1}
+  lossStarScale: 0.7
+  lossShake: 8
+  lossDuration: 0.5
 --- !u!1 &2024819607
 GameObject:
   m_ObjectHideFlags: 0

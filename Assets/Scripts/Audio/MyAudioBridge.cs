@@ -24,6 +24,10 @@ public class MyAudioBridge : MonoBehaviour
     [Tooltip("Sound played when flipping the net.")]
     [SerializeField] private AudioClip netFlipSound;
 
+    [Tooltip("Volume of the SFX above. Separate from the music volume, so fading the music never fades them.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float sfxVolume = 0.5f;
+
     [Header("Melt Sound")]
     [Tooltip("Sound played while the snow in the net melts.")]
     [SerializeField] private AudioClip meltSound;
@@ -34,19 +38,44 @@ public class MyAudioBridge : MonoBehaviour
     [Tooltip("When the melt ends, the sound fades out over this many seconds. If the clip is longer than the melt, it gets cut here.")]
     [SerializeField, Min(0.01f)] private float meltFadeOut = 0.15f;
 
-    private AudioSource audioSource;
-    private AudioSource meltSource;
+    [Header("Time Running Out")]
+    [Tooltip("Loops from the moment the warning starts (30s left) until time is up.")]
+    [SerializeField] private AudioClip timeWarningLoopSound;
+    [Range(0f, 1f)]
+    [SerializeField] private float timeWarningVolume = 0.8f;
+
+    [Header("Game Over")]
+    [Tooltip("Plays once when the timer reaches 0.")]
+    [SerializeField] private AudioClip gameOverSound;
+    [Range(0f, 1f)]
+    [SerializeField] private float gameOverVolume = 1f;
+    [Tooltip("Fade the background music out when the game ends.")]
+    [SerializeField] private bool fadeMusicOnGameOver = true;
+    [SerializeField, Min(0.01f)] private float musicFadeOut = 0.5f;
+
+    private AudioSource musicSource;   // background music only
+    private AudioSource sfxSource;     // one-shot sound effects
+    private AudioSource meltSource;    // melt sound (can be cut short)
+    private AudioSource warningSource; // time-running-out loop
     private Coroutine meltFadeRoutine;
+    private Coroutine musicFadeRoutine;
 
     private void Awake()
     {
-        audioSource = GetComponent<AudioSource>();
+        musicSource = GetComponent<AudioSource>();
 
-        // Separate source so the melt sound can be stopped on its own
-        // without touching the music or other SFX.
-        meltSource = gameObject.AddComponent<AudioSource>();
-        meltSource.playOnAwake = false;
-        meltSource.loop = false;
+        // Separate sources so each sound can be stopped or faded on its own.
+        sfxSource = CreateSource(false);
+        meltSource = CreateSource(false);
+        warningSource = CreateSource(true);
+    }
+
+    private AudioSource CreateSource(bool loop)
+    {
+        AudioSource source = gameObject.AddComponent<AudioSource>();
+        source.playOnAwake = false;
+        source.loop = loop;
+        return source;
     }
 
     private void Start()
@@ -62,6 +91,8 @@ public class MyAudioBridge : MonoBehaviour
         GameEvents.NetFlipped += OnNetFlipped;
         GameEvents.MeltStarted += OnMeltStarted;
         GameEvents.MeltFinished += OnMeltFinished;
+        GameEvents.TimeWarningStarted += OnTimeWarningStarted;
+        GameEvents.GameOver += OnGameOver;
     }
 
     private void OnDisable()
@@ -72,18 +103,20 @@ public class MyAudioBridge : MonoBehaviour
         GameEvents.NetFlipped -= OnNetFlipped;
         GameEvents.MeltStarted -= OnMeltStarted;
         GameEvents.MeltFinished -= OnMeltFinished;
+        GameEvents.TimeWarningStarted -= OnTimeWarningStarted;
+        GameEvents.GameOver -= OnGameOver;
     }
 
     // --- Background Music Control ---
 
     private void PlayBackgroundMusic()
     {
-        if (backgroundMusicClip != null && audioSource != null)
+        if (backgroundMusicClip != null && musicSource != null)
         {
-            audioSource.clip = backgroundMusicClip;
-            audioSource.loop = loopMusic;
-            audioSource.volume = musicVolume;
-            audioSource.Play();
+            musicSource.clip = backgroundMusicClip;
+            musicSource.loop = loopMusic;
+            musicSource.volume = musicVolume;
+            musicSource.Play();
         }
     }
 
@@ -153,12 +186,56 @@ public class MyAudioBridge : MonoBehaviour
         meltFadeRoutine = null;
     }
 
+    // --- Time running out: loop from the warning until game over ---
+
+    private void OnTimeWarningStarted()
+    {
+        if (timeWarningLoopSound == null || warningSource == null) return;
+
+        warningSource.clip = timeWarningLoopSound;
+        warningSource.volume = timeWarningVolume;
+        warningSource.loop = true;
+        warningSource.Play();
+    }
+
+    // --- Game over: stop the loop, play the game over sound, fade the music ---
+
+    private void OnGameOver()
+    {
+        if (warningSource != null) warningSource.Stop();
+
+        if (gameOverSound != null && sfxSource != null)
+            sfxSource.PlayOneShot(gameOverSound, gameOverVolume);
+
+        if (fadeMusicOnGameOver && musicSource != null && musicSource.isPlaying)
+        {
+            if (musicFadeRoutine != null) StopCoroutine(musicFadeRoutine);
+            musicFadeRoutine = StartCoroutine(FadeOutMusic());
+        }
+    }
+
+    private IEnumerator FadeOutMusic()
+    {
+        float startVolume = musicSource.volume;
+        float t = 0f;
+
+        while (t < musicFadeOut)
+        {
+            t += Time.unscaledDeltaTime;
+            musicSource.volume = Mathf.Lerp(startVolume, 0f, t / musicFadeOut);
+            yield return null;
+        }
+
+        musicSource.Stop();
+        musicFadeRoutine = null;
+    }
+
     // Helper method to overlap SFX cleanly without cutting off background music
     private void PlaySound(AudioClip clip)
     {
-        if (clip != null && audioSource != null)
+        if (clip != null && sfxSource != null)
         {
-            audioSource.PlayOneShot(clip);
+            sfxSource.PlayOneShot(clip, sfxVolume);
         }
     }
 }

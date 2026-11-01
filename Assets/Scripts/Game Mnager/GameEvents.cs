@@ -26,6 +26,10 @@ public static class GameEvents
     public static event Action<Vector3> ShockwaveStarted;
     public static event Action<float> SantaShoved;      // signed push strength
 
+    // ---- Game flow ----
+    public static event Action TimeWarningStarted;      // the last seconds just began (start the warning loop)
+    public static event Action GameOver;                // the timer hit 0
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
     {
@@ -33,6 +37,7 @@ public static class GameEvents
         NetFull = null; MeltStarted = null; MeltFinished = null; NetFlipped = null;
         BombSpawned = null; BombCaught = null; BombRemoved = null;
         ShockwaveStarted = null; SantaShoved = null;
+        TimeWarningStarted = null; GameOver = null;
     }
 
     // Events can only be fired from inside this class, so gameplay scripts call these.
@@ -48,4 +53,6 @@ public static class GameEvents
     public static void RaiseBombRemoved(Bomb b, BombEnd why) { BombRemoved?.Invoke(b, why); }
     public static void RaiseShockwaveStarted(Vector3 p) { ShockwaveStarted?.Invoke(p); }
     public static void RaiseSantaShoved(float s) { SantaShoved?.Invoke(s); }
+    public static void RaiseTimeWarningStarted() { TimeWarningStarted?.Invoke(); }
+    public static void RaiseGameOver() { GameOver?.Invoke(); }
 }
